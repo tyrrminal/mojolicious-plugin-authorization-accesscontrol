@@ -227,8 +227,8 @@ logic once privilege checks are passed.
 use Mojo::Base 'Mojolicious::Plugin';
 
 use Exporter 'import';
-use Mojo::Exception qw(raise);
 use Mojolicious::Plugin::Authorization::RBAC::Privilege;
+use Mojolicious::Plugin::Authorization::RBAC::YieldResult;
 use Readonly;
 use Syntax::Keyword::Try;
 

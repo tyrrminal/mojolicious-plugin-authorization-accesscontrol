@@ -283,7 +283,7 @@ sub _role($params, $container = undef) {
   foreach my $role (keys($params->%*)) {
     die("Invalid RBAC role name: '$role'\n") if($role !~ /\w/);
     foreach($params->{$role}->@*) {
-      $_->_role = $role;
+      $_->role($role);
       _add_priv($_, $container);
     }
   }

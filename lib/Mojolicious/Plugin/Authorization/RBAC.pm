@@ -307,10 +307,10 @@ sub _any_role($privs, $container = undef) {
   _add_priv($_, $container) foreach($privs->@*);
 }
 
-=head2 priv($resource, $action[, $attrs])
+=head2 priv($resource, $action[, $restrictions])
 
 Returns a L<Privilege|Mojolicious::Plugin::Authorization::RBAC::Privilege> object
-for the passed resource/action and optional attributes.
+for the passed resource/action and optional restrictions on that privilege.
 
 N.B. the returned object is not registered and must be declared with, e.g.,
 L</role>/L</any_role> to be used for 
@@ -318,11 +318,11 @@ L<authz.permitted|/authz.permitted-($resource,-$action-[,-$attrs])>  checks.
 
 =cut
 
-sub priv($resource, $action, $attrs = []) {
+sub priv($resource, $action, $restrictions = {}) {
   Mojolicious::Plugin::Authorization::RBAC::Privilege->new(
-    resource   => $resource,
-    action     => $action,
-    attributes => $attrs
+    resource     => $resource,
+    action       => $action,
+    restrictions => $restrictions
   )
 }
 

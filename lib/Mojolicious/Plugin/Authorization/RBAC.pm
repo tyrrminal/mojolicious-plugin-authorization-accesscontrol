@@ -462,21 +462,26 @@ Logs a "granted" or "denied" message to the selected C<Mojo::Log> instance
 =cut
 
   $app->helper($prefix.'.permitted' => 
-    sub($c, $resource, $action, $attrs = undef) {
+    sub($c, $resource, $action, $attrs = undef, $ctx = undef) {
       my @roles = $get_roles->($c)->@*;
-      if(!defined($attrs) && $cb{$resource}) {
-        try { $attrs = $cb{$resource}->($c, $c->stash->{$REQ_CTX}) } catch($e) { warn($e)}
+      if($cb{$resource}) {
+        try { $attrs = {($attrs//{})->%*, ($cb{$resource}->($c, $ctx//$c->stash->{$REQ_CTX})//{})->%*} } catch($e) { warn($e)}
       }
-      
-      my @p = grep { 
-           $_->match_role(@roles)        
-        && $_->match_resource($resource) 
-        && $_->match_action($action)     
-        && $_->match_attributes($attrs)  
-      } (@privs, ($c->stash($REQ_PRIVS)||[])->@*);
+
+      my @all_privs = (@privs, ($c->stash($REQ_PRIVS)||[])->@*);
+      my @p = grep { $_->accepts(        
+        resource   => $resource, 
+        action     => $action, 
+        attributes => $attrs, 
+        roles      => [@roles],
+      ) } (@all_privs);
 
       if(@p) { $log_f->("[Authorization::RBAC] Granted: ".$p[0]); return 1; }
-      $log_f->("[Authorization::RBAC] Denied: [".join(', ', @roles)."] $resource => $action(".join(', ', grep { $attrs->{$_} } keys($attrs->%*)).")"); return 0;
+      my $role_str = @roles ? '['.join(',', @roles).'] ' : '';
+      my $attr_str = '('.join(',',(map { "$_=".$attrs->{$_} } (keys(($attrs//{})->%*)))).')';
+      my $check = sprintf("$role_str$resource => $action$attr_str");
+      $log_f->("[Authorization::RBAC] Denied: $check");
+      return 0;
     }
   );
 
@@ -500,7 +505,7 @@ L<Privileges|Mojolicious::Plugin::Authorization::RBAC::Privilege> (as from
 L</priv>) may be passed instead -- however, please note that only the
 L<resource|Mojolicious::Plugin::Authorization::RBAC::Privilege/resource> and
 L<action|Mojolicious::Plugin::Authorization::RBAC::Privilege/action> properties
-are respected on these objects. 
+are respected on these objects.
 
 An authorization log message is emitted for each privilege checked.
 
@@ -510,23 +515,15 @@ C<Authorization::RBAC::Failure> exception is thrown.
 =cut
   
   $app->helper($prefix.'.yield' => 
-    sub($c, $cb, @args) {
-      my ($resource, $action, $attrs);
-      if(!ref($args[0]) || !$args[0]->isa($PRIV_CLASS)) {
-        ($resource, $action, $attrs) = @args;
-        @args = (priv($resource, $action));
-      }
+    sub($c, $get_obj, $resource, $action, $attrs = {}) {
 
-      my $authz = $c->app->renderer->get_helper($prefix)->($c);
-      # if $attrs exists, we don't need to evaluate the callback to populate it, so we can fail fast
-      if($attrs) { raise($EXCEPTION_UNAUTH, 'Unauthorized') unless($authz->permitted($resource, $action, $attrs)) };
-      my $obj = $cb->();
-      # If we got back null from the callback, proceeding is nonsense, so let the caller catch that specific exception
-      raise($EXCEPTION_NULL, 'RBAC yield callback returned undef') unless(defined($obj));
-      $authz->context($obj);
+      my $obj = $get_obj->();
+      # If we got back null from the callback, we'll create an empty yield result so the caller can handle it on ->nullyield
+      return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => undef, entity => undef) unless(defined($obj));
       # Once the context is set, we can check permitted with evaluated attrs
-      if(!$attrs) { foreach (@args) { raise($EXCEPTION_UNAUTH, 'Unauthorized') unless($authz->permitted($_->resource, $_->action)) } }
-      return $obj;
+      my $permitted = $c->app->renderer->get_helper($prefix)->($c)->permitted($resource, $action, $attrs, $obj);
+      return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => 1, entity => $obj) if($permitted);
+      return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => 0, entity => undef);
     }
   );
 

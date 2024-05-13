@@ -109,11 +109,13 @@ By registering an attribute callback with L</attr_cb> and establishing an authz
 L<context|/authz.context-($value)> prior to checking privileges, the entity's attributes 
 will be calculated for you.
 
-Finally, the L<yield|/authz.yield-($cb,-@args)> method allows you to guard the 
-privileged data retrieval and establish context at the same time, preventing any
-inadvertent leakage of data. With this approach, permission denials are thrown 
-as exceptions -- L<Syntax::Keyword::Try>'s C<typed> exception functionality is 
-helpful for handling these (though not required).
+Finally, the L<yield|/authz.yield-($cb,-@args)> method can be used to cleanly
+isolate the code that obtains instances of protected data from the code that
+consumes them. The value returned by the C<$cb> callback is passed through the
+attribute callback, and then those attributes are used to determine whether to
+grant or deny access. The produced value is accessible only from the C<granted>
+callback. See L<Mojolicious::Plugin::Authorization::YieldResult> for more
+information.
 
   BEGIN {
     any_role(
@@ -128,23 +130,27 @@ helpful for handling these (though not required).
     })
   }
 
-  use Symtax::Keyword::Try qw(try :experimental(typed));
-
   sub edit($self) {
     try {
       my $book = $self->authz->yield(sub() {
         db->model('book')->get($self->param('id'));
-      }, Book => 'edit');
-      # handle edit logic here
-      $book->update(...);
-    } catch($e isa Authorization::RBAC::NullYield) {
-      # thrown if the value returned by the sub is undef
-      return $self->render(status => 404)
-    } catch($e isa Authorization::RBAC::Failure) {
-      # thrown if all privilege checks fail
-      return $self->render(status => 401)
+      }, Book => 'edit')
+      ->granted(sub ($book) {
+        # handle edit logic here
+        $book->update(...);
+        $self->render(json => $book)
+      })
+      ->denied(sub() {
+        # if all privilege checks fail
+        return $self->render(status => 401)
+      })
+      ->null(sub() {
+        # if the value returned by the sub is undef
+        return $self->render(status => 404)
+      })
     } catch($e) {
-      return $self->render(status => 400)
+      # if any die/croak/raise occurs
+      return $self->render(status => 400, text => $e)
     }
   }
 

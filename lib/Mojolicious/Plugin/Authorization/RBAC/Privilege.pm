@@ -21,14 +21,16 @@ privilege
   );
 
   my $p2 = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(
-    resource   => 'Book',
-    action     => 'edit',
-    attributes => [qw(public)]
+    resource     => 'Book',
+    action       => 'edit',
+    restrictions => {public => 1},
   );
 
   if($p1->is_equal($p2)) { ... } # no
 
-  if($p2->match_resource('Book')) { ... } # yes
+  if($p2->satisfies_resource('Book')) { ... } # yes
+
+  if($p2->accepts(resource => 'Book', action => 'edit', attributes => {public => 0})) { .. } # no
 
   say "$p2"; # 'Book => edit(public)'
 
@@ -39,8 +41,7 @@ encapsulate an authorization privilege. Typically, privileges are created throug
 that package's convenience function 
 L<priv|Mojolicious::Plugin::Authorization::RBAC/priv> rather than using this
 class's constructor directly. Either way, newly-created privileges are not
-registered as "active" for checks until RBAC's C<role>/C<any_role> functions are
-used. 
+registered for checks until RBAC's C<role>/C<any_role> functions are used. 
 
 =head1 METHODS
 
@@ -56,39 +57,52 @@ The constructor takes 4 named arguments, two of which are required:
 
 =item * action (required)
 
-=item * attributes (optional)
+=item * restrictions (optional)
 
 =back
 
-With the exception of attributes, which is an ArrayRef of strings, all arguments
-are simple strings.
+With the exception of restrictions, which is an ArrayRef of strings, all arguments
+are simple strings. Role may not be an empty string, although C<undef> is allowed.
 
 =cut
 
 use Object::Pad;
 
 class Mojolicious::Plugin::Authorization::RBAC::Privilege :strict(params) {
-  use List::Util qw(reduce);
+  use Data::Compare;
+  use Scalar::Util qw(looks_like_number);
 
   use overload
     '""' => 'to_string';
   
-  field $role       :param :accessor :mutator(_role) = undef;
-  field $resource   :param :accessor;
-  field $action     :param :accessor;
-  field $attributes :param :accessor = [];
+  field $role         :param :accessor = undef;
+  field $resource     :param :reader;
+  field $action       :param :reader;
+  field $restrictions :param :reader = {};
 
   ADJUST {
     die("Resource is a required string") unless(!ref($resource) && $resource);
     die("Action is a required string") unless(!ref($action) && $action);
+    die("Role cannot be an empty string") if(defined($role) && !looks_like_number($role) && !$role);
+
+    $restrictions = {} unless(defined($restrictions));
   }
 
   method to_string {
-    my $r = defined($role) ? "[$role] " : '';
-    "$r$resource => $action(".join(',',$attributes->@*).")"
+    my $role_str = $role ? "[$role] " : '';
+    my $restriction_str = "";
+    foreach (keys($restrictions->%*)) {
+      my $v;
+      if($restrictions->{$_})                       { $v = $restrictions->{$_} }
+      elsif(looks_like_number($restrictions->{$_})) { $v = 0 }
+      else                                          { $v = 'false' }
+      $restriction_str .= "$_=$v,";
+    }
+    chop($restriction_str);
+    my $str = "$role_str$resource => $action($restriction_str)"
   }
 
-=head1 match_role
+=head2 satisfies_role
 
 Given a list of roles, returns true if any of them match the C<role> field value
 
@@ -96,60 +110,78 @@ If C<role> field value is undef, returns true
 
 =cut
 
-  method match_role(@roles) {
-    return 1 unless(defined($role));
-    return grep { defined($_) && $role eq $_ } @roles;
+  method satisfies_role(@roles) {
+    return 1 unless($role);
+    return (grep { $_ eq $role } @roles) > 0;
   }
 
-=head1 match_resource
+=head2 satisfies_resource
 
 Returns true if the argument is the same as the C<resource> field value, false
 otherwise
 
 =cut
 
-  method match_resource($r) {
+  method satisfies_resource($r) {
+    return 0 unless(defined($r));
     $r eq $resource
   }
 
-=head1 match_action
+=head2 satisfies_action
 
 Returns true if the argument is the same as the C<action> field value, false
 otherwise
 
 =cut
 
-  method match_action($a) {
+  method satisfies_action($a) {
+    return 0 unless(defined($a));
     $a eq $action
   }
 
-=head1 match_attributes
+=head2 satisfies_restrictions
 
-Given a HashRef whose keys are attribute identifiers (strings) and whose values
-are booleans, returns true if all of the C<attributes> field contents are 
-present in the HashRef and their values are true.
+Given a HashRef whose keys are attribute identifiers (strings), returns true if 
+all of the C<restrictions> field contents are present in the HashRef and their 
+values match.
 
 =cut
 
-  method match_attributes($attrs) {
-    reduce { $a && $b } (1, @{$attrs}{$attributes->@*})
+  method satisfies_restrictions($attrs) {
+    my %attrs = $attrs->%*;
+    delete($attrs{$_}) foreach (grep { !exists($restrictions->{$_}) } keys(%attrs));
+    my $v = Compare($restrictions, \%attrs);
+    return $v;
   }
 
-=head1 is_equal
+=head2 is_equal
 
 Given another Privilege object, returns true if role, resource, action, and 
-attributes match.
+restrictions match.
 
 =cut
 
   method is_equal($priv) {
-    return 0 unless($priv->match_role($role));
-    return 0 unless($priv->match_resource($resource));
-    return 0 unless($priv->match_action($action));
-    return 0 unless(
-      $priv->match_attributes({map { $_ => 1 } $attributes->@*}) &&
-      $self->match_attributes({map { $_ => 1 } $priv->attributes->@*})
-    );
+    return 0 unless(        ($role//'') eq  ($priv->role//''));
+    return 0 unless(        $resource   eq  $priv->resource);
+    return 0 unless(        $action     eq  $priv->action);
+    return 0 unless(Compare($restrictions,  $priv->restrictions));
+    return 1;
+  }
+
+=head2 accepts
+
+Returns true if the C<resource>, C<action>, C<roles>, and C<attributes> parameters
+passed to the method satisfies the privilege's resource, action, role, and
+restrictions properties, respectively.
+
+=cut
+  
+  method accepts(%params) {
+    return 0 unless($self->satisfies_resource($params{resource}));
+    return 0 unless($self->satisfies_action($params{action}));
+    return 0 unless($self->satisfies_role(($params{roles}//[])->@*));
+    return 0 unless($self->satisfies_restrictions($params{attributes}//{}));
     return 1;
   }
 }

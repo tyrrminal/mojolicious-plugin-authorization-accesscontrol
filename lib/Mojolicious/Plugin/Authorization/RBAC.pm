@@ -234,12 +234,7 @@ use Syntax::Keyword::Try;
 
 use experimental qw(signatures);
 
-Readonly::Scalar my $PREFIX => 'authz';
-
-Readonly::Scalar my $PRIV_CLASS       => 'Mojolicious::Plugin::Authorization::RBAC::Privilege';
-
-Readonly::Scalar my $EXCEPTION_UNAUTH => 'Authorization::RBAC::Failure';
-Readonly::Scalar my $EXCEPTION_NULL   => 'Authorization::RBAC::NullYield';
+Readonly::Scalar my $DEFAULT_PREFIX => 'authz';
 
 our @EXPORT_OK = qw(role priv any_role attr_cb);
 
@@ -384,7 +379,7 @@ sub register($self, $app, $args) {
     }
   }
 
-  my $prefix = $args->{prefix} // $PREFIX;
+  my $prefix = $args->{prefix} // $DEFAULT_PREFIX;
   Readonly::Scalar my $REQ_PRIVS => "_${prefix}.privs";
   Readonly::Scalar my $REQ_CTX   => "_${prefix}.ctx";
 

@@ -5,31 +5,109 @@ use Test2::V0;
 
 use Mojolicious::Plugin::Authorization::RBAC::Privilege;
 
-ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new() } , 'fail without resource');
+# Test constructor
 
-ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User') } , 'fail without action');
+ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new() },                                                                 'fail without resource');
+ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User') },                                               'fail without action');
+ok(       Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read'),                               'required params');
+ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', context => 1) } ,              'fail with extra params');
+ok(       Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => {owned => 1}), 'required params and attributes');
+ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => undef,  action => 'read') },                             'fail with undef resource');
+ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => undef) },                              'fail with undef action');
+ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => '')},                  'fail with empty role');
 
-ok(Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read'), 'required params');
+# Test is_equal
+my ($pa, $pb);
 
-ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', context => 1) } , 'fail with extra params');
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read'  );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'Image', action => 'read' );
 
-ok(Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', attributes => [qw(owned)]), 'required params and attributes');
+is($pa->is_equal($pb), bool(0), 'differing resource');
 
-ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => undef, action => 'read', context => 1) }, 'fail with undef resource');
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read'  );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'write' );
 
-ok(dies { Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => undef, context => 1) }, 'fail with undef action');
+is($pa->is_equal($pb), bool(0), 'differing action');
 
-my $priv1 = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read');
-my $priv1a = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read');
-my $priv2 = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', attributes => [qw(owned)]);
-my $priv2a = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', attributes => [qw(own)]);
-my $priv3 = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'Book', action => 'read');
-my $priv4 = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'create');
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read'  );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read' );
 
-is($priv1->is_equal($priv1a), bool(1), 'check equal');
-is($priv1->is_equal($priv2), bool(0), 'check unequal (attrs)');
-is($priv2->is_equal($priv2a), bool(0), 'check unequal (attrs)');
-is($priv1->is_equal($priv3), bool(0), 'check unequal (resource)');
-is($priv1->is_equal($priv4), bool(0), 'check unequal (action)');
+is($pa->is_equal($pb), bool(1), 'same resource/action, no restrictions');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => {} );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => undef );
+
+is($pa->is_equal($pb), bool(1), 'same resource/action, empty vs undefined restrictions');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => undef );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => {} );
+
+is($pa->is_equal($pb), bool(1), 'same resource/action, undefined vs empty restrictions');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => {} );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => {} );
+
+is($pa->is_equal($pb), bool(1), 'same resource/action, empty vs empty restrictions');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => { rep => 'small' } );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => {} );
+
+is($pa->is_equal($pb), bool(0), 'same resource/action, unequal restrictions (l)');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => {  } );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => { rep => 'small' } );
+
+is($pa->is_equal($pb), bool(0), 'same resource/action, unequal restrictions (r)');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => { rep => 'small' } );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'write', restrictions => { rep => 'small' } );
+
+is($pa->is_equal($pb), bool(0), 'same restrictions, different action');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => { rep => 'small' } );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'Image', action => 'read', restrictions => { rep => 'small' } );
+
+is($pa->is_equal($pb), bool(0), 'same restrictions, different resource');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => { rep => 'small' } );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', restrictions => { rep => 'large' } );
+
+is($pa->is_equal($pb), bool(0), 'differing restrictions values');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => 'Admin' );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read' );
+
+is($pa->is_equal($pb), bool(0), 'role vs no role');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => 'Admin' );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => 'admin' );
+
+is($pa->is_equal($pb), bool(0), 'case-sensitive role');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => 'admin' );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => 'admin' );
+
+is($pa->is_equal($pb), bool(1), 'resource/action/role match');
+
+$pa  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => 'admin', restrictions => { owned => 1 } );
+$pb  = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'User', action => 'read', role => 'admin', restrictions => { owned => 1 } );
+
+is($pa->is_equal($pb), bool(1), 'resource/action/role/restrictions match');
+
+my $pc = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(resource => 'Image', action => 'view', restrictions => {image_id => 9, rep => 'small'});
+is($pc->accepts(),                                                        bool(0), 'undef resource');
+is($pc->accepts(resource => 'Image'),                                     bool(0), 'undef action');
+is($pc->accepts(resource => 'Image', action => 'view'),                   bool(0), 'undef restrictions');
+is($pc->accepts(resource => 'Image', action => 'view', attributes => {}), bool(0), 'empty restrictions');
+is($pc->accepts(resource => 'Image', action => 'view', attributes => { image_id => 9 }), bool(0), 'partial restrictions');
+is($pc->accepts(resource => 'Image', action => 'view', attributes => { deleted => 0, owned => 1 }), bool(0), 'extra restrictions');
+is($pc->accepts(resource => 'Image', action => 'view', attributes => { image_id => 9, rep => 'small' }), bool(1), 'met restrictions');
+is($pc->accepts(resource => 'Image', action => 'view', attributes => { image_id => 9, rep => 'small', deleted => 0, owned => 1 }), bool(1), 'met + extra restrictions');
+
+$pc = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(role => 'admin', resource => 'Image', action => 'view', restrictions => {image_id => 9, rep => 'small'});
+is($pc->accepts(resource => 'Image', action => 'view', attributes => { image_id => 9, rep => 'small', }), bool(0), 'unspecified roles');
+is($pc->accepts(roles => [], resource => 'Image', action => 'view', attributes => { image_id => 9, rep => 'small', }), bool(0), 'empty roles');
+is($pc->accepts(roles => [qw(Admin)], resource => 'Image', action => 'view', attributes => { image_id => 9, rep => 'small', }), bool(0), 'case-sensitive roles');
+is($pc->accepts(roles => [qw(admin)], resource => 'Image', action => 'view', attributes => { image_id => 9, rep => 'small', }), bool(1), 'match all including roles');
 
 done_testing;

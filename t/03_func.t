@@ -9,9 +9,9 @@ ok(!warns { role(admin => [priv(User => 'read')]) }, 'check role/priv add');
 
 ok(warns { role(admin => [priv(User => 'read')]) }, "check can't add dupe priv");
 
-ok(!warns { role(admin => [priv(User => 'read', [qw(owner)])]) }, 'check add dupe priv w/ attribute');
+ok(!warns { role(admin => [priv(User => 'read', {owner => !0})]) }, 'check add dupe priv w/ attribute');
 
-ok(warns { role(admin => [priv(User => 'read', [qw(owner)])]) }, "check can't add dupe priv w/ attribute");
+ok(warns { role(admin => [priv(User => 'read', {owner => !0})]) }, "check can't add dupe priv w/ attribute");
 
 ok(!warns { role(admin => [priv(User => 'create')]) }, 'check can add non-dupe');
 

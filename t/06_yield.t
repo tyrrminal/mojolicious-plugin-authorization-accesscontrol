@@ -7,7 +7,7 @@ use Mojolicious::Lite;
 
 use List::Util qw(first);
 use Mojolicious::Plugin::Authorization::RBAC qw(role priv any_role attr_cb);
-use Syntax::Keyword::Try qw( try :experimental(typed) );
+use Syntax::Keyword::Try;
 use Test::Mojo;
 
 use experimental qw(signatures);
@@ -36,17 +36,15 @@ plugin('Authorization::RBAC' => {
 get('/product/<id:num>' => sub($c) {
   my $id = $c->param('id');
   try {
-    my $product = $c->authz->yield(sub() {
+    $c->authz->yield(sub() {
       my ($item) = grep { $_->{id} == $id } @products;
       $item;
-    }, Product => 'view');
-    return $c->render(status => 200, json => $product);
-  } catch($e isa Authorization::RBAC::NullYield) {
-    return $c->render(status => 404, text => 'not found')
-  } catch($e isa Authorization::RBAC::Failure) {
-    return $c->render(status => 401, text => 'auth fail')
+    }, Product => 'view')
+    ->granted(sub ($product) { $c->render(status => 200, json => $product)    })
+    ->denied(sub () {          $c->render(status => 401, text => 'auth fail') })
+    ->null(sub () {            $c->render(status => 404, text => 'not found') })
   } catch($e) {
-    return $c->render(status => 400, text => $e)
+    $c->render(status => 400, text => $e)
   }
 });
 
@@ -54,19 +52,19 @@ get('/product/<id:num>' => sub($c) {
 del('/product/<id:num>' => sub($c) {
   my $id = $c->param('id');
   try {
-    my $product = $c->authz->yield(sub() {
+    $c->authz->yield(sub() {
       my ($item) = grep { $_->{id} == $id } @products;
       $item;
-    }, Product => 'delete');
-    my $idx = first { $products[$_]->{id} == $id } 0..$#products;
-    splice(@products, $idx, 1);
-    return $c->render(status => 204, text => '');
-  } catch($e isa Authorization::RBAC::NullYield) {
-    return $c->render(status => 404, text => 'not found')
-  } catch($e isa Authorization::RBAC::Failure) {
-    return $c->render(status => 401, text => 'auth fail')
+    }, Product => 'delete')
+    ->granted(sub ($product) { 
+      my $idx = first { $products[$_]->{id} == $id } 0..$#products;
+      splice(@products, $idx, 1);
+      $c->render(status => 204, text => '');
+     })
+    ->denied(sub () { $c->render(status => 401, text => 'auth fail') })
+    ->null(sub () { $c->render(status => 404, text => 'not found') })
   } catch($e) {
-    return $c->render(status => 400, text => $e)
+    $c->render(status => 400, text => $e)
   }
 });
 
@@ -80,8 +78,8 @@ any_role(
 );
 role(user => [
   priv(Product => 'create'),
-  priv(Product => 'edit',   [qw(owned)]),
-  priv(Product => 'delete', [qw(owned)]),
+  priv(Product => 'edit',   {owned => 1}),
+  priv(Product => 'delete', {owned => 1}),
 ]);
 role(admin => [
   priv(Product => 'create'),

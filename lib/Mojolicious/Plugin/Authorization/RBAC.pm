@@ -260,7 +260,7 @@ sub _add_priv($priv, $container) {
   } else {
     $container = \@privs;
   }
-  die('Invalid privilege object') unless(ref($priv) && $priv->isa($PRIV_CLASS));
+  die('Invalid privilege object') unless(ref($priv) && $priv->isa('Mojolicious::Plugin::Authorization::RBAC::Privilege'));
   warn("Duplicate privilege skipped: $priv\n") and return if (grep { $priv->is_equal($_) } @all_privs);
   push($container->@*, $priv);
 }

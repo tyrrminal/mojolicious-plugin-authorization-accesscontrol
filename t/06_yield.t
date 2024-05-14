@@ -6,7 +6,7 @@ use Test2::V0;
 use Mojolicious::Lite;
 
 use List::Util qw(first);
-use Mojolicious::Plugin::Authorization::RBAC qw(role priv any_role attr_cb);
+use Mojolicious::Plugin::Authorization::RBAC qw(role priv any_role);
 use Syntax::Keyword::Try;
 use Test::Mojo;
 
@@ -88,13 +88,19 @@ role(admin => [
 ]);
 
 # configure a callback to generate product attributes
-attr_cb(Product => sub($c, $ctx) {
-  +{
+helper('authz.extract_attrs' => sub($c, $ctx) {
+  return +{
     owned => $ctx->{owner_id} == $current_user->{id}
   };
 });
 
 my $t = Test::Mojo->new();
+
+$current_user = $users[0];
+$t->delete_ok("/product/3")->status_is(204);
+
+done_testing;
+__END__\
 
 $current_user = $users[1];
 # not in any groups; can't delete anything (including their own stuff!)

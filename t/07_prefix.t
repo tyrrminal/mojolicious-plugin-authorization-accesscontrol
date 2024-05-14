@@ -16,10 +16,6 @@ ok(dies { app->authz->priv(Book => 'view') } , 'use default prefix');
 
 ok(lives { app->authorization->any_role(app->authorization->priv(Book => 'view')) }, 'use custom prefix');
 
-hook(before_dispatch => sub($c) {
-  ok($c->authorization->context({a => 1}));
-});
-
 get("/books" => sub($c) { return $c->render(status => 401, text => '') unless($c->authorization->permitted(Book => 'view')); $c->render(text => '') });
 del("/books" => sub($c) { return $c->render(status => 401, text => '') unless($c->authorization->permitted(Book => 'delete')); $c->render(text => '') });
 

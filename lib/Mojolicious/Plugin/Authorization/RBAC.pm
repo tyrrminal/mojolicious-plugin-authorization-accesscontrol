@@ -92,24 +92,22 @@ multiple permissons checks.
       priv(Book => 'edit', {owner => true}),
       priv(Book => 'edit', {public => true}),
     );
-    attr_cb(Book => sub($c, $ctx) {
-      +{
-        owned => $ctx->owner->id == $c->current_user->id,
-        public => $ctx->is_public
-      }
-    })
+  }
+
+  sub extract_attrs($c, $ctx) {
+    +{
+      owned => $ctx->owner->id == $c->current_user->id,
+      public => $ctx->is_public
+    }
   }
 
   sub edit($self) {
     my $book = db->model('book')->get($self->param('id'));
-    return $self->render(status => 401) unless($self->authz->context($book)->permitted(Book => 'edit'));
+    return $self->render(status => 401) unless($self->authz->permitted(Book => 'edit', {}, $book));
     ...
   }
 
-By registering an attribute callback with L</attr_cb> and establishing an authz
-L<context|/authz.context-($value)> prior to checking privileges, the entity's 
-attributes will be dynamically determined just prior to evalauating the 
-privileges.
+By registering...
 
 Finally, the L<yield|/authz.yield-($cb,-@args)> method can be used to cleanly
 isolate the code that obtains instances of protected data from the code that
@@ -124,12 +122,13 @@ information.
       priv(Book => 'edit', {owner => true}),
       priv(Book => 'edit', {public => true}),
     );
-    attr_cb(Book => sub($c, $ctx) {
-      +{
-        owned => $ctx->owner->id == $c->current_user->id,
-        public => $ctx->is_public
-      }
-    })
+  }
+
+  sub extract_attrs($c, $ctx) {
+    +{
+      owned => $ctx->owner->id == $c->current_user->id,
+      public => $ctx->is_public
+    }
   }
 
   sub edit($self) {
@@ -185,13 +184,14 @@ of each request, ensuring that they are always up-to-date.
       priv(Book => 'edit', {owner => true}),
       priv(Book => 'edit', {public => true}),
     );
-    # match the restrictions in the dynamic rules with Book-specific attributes
-    attr_cb(Book => sub($c, $ctx) {
-      +{
-        book_id => $ctx->id,
-      }
-    })
   }
+
+  # match the restrictions in the dynamic rules with Book-specific attributes
+  helper(extract_attrs => sub($c, $ctx) {
+    +{
+      book_id => $ctx->id,
+    }
+  });
 
 Now, when the privileges are checked, the user's group must match, and the 
 C<book_id> attribute must also match, allowing for fine-grained privilege
@@ -223,10 +223,7 @@ provided as a convenience.
 
 When it comes to checking privileges, a few options are available as well. The
 simplest is the L<authz.permitted|/authz.permitted-($resource,-$action-[,-$attrs])> 
-helper, which can be optionally provided an C<attributes> array or combined with 
-a data context via the L<authz.context|/authz.context-($value)> helper and the 
-corresponding L</attr_cb> callback. Or, you can use 
-L<authz.yield|/authz.yield-($cb,-@args)> to invoke the 
+helper. Or, you can use L<authz.yield|/authz.yield-($cb,-@args)> to invoke the 
 L<Mojolicious::Plugin::Authorization::RBAC::YieldResult> workflow and ensure 
 that privileged data objects are only made available to application logic once 
 privilege checks are passed.
@@ -245,11 +242,10 @@ use experimental qw(signatures);
 
 Readonly::Scalar my $DEFAULT_PREFIX => 'authz';
 
-our @EXPORT_OK = qw(role priv any_role attr_cb);
+our @EXPORT_OK = qw(role priv any_role);
 
 # Global datastore for static rules and callbacks
 my @privs;
-my %cb;
 
 =head1 FUNCTIONS
 
@@ -330,18 +326,6 @@ sub priv($resource, $action, $restrictions = {}) {
   )
 }
 
-=head2 attr_cb($resource, sub($c, $ctx) {...})
-
-Registers a callback for a given resource type. The callback receives the 
-controller object and the RBAC context as arguments, and returns a HashRef of
-attributes which apply to that context whose values are boolean.
-
-=cut
-
-sub attr_cb($resource, $cb) {
-  $cb{$resource} = $cb;
-}
-
 =head1 METHODS
 
 L<Mojolicious::Plugin::Authorization::RBAC> inherits all methods from 
@@ -389,8 +373,7 @@ sub register($self, $app, $args) {
   }
 
   my $prefix = $args->{prefix} // $DEFAULT_PREFIX;
-  Readonly::Scalar my $REQ_PRIVS => "_${prefix}.privs";
-  Readonly::Scalar my $REQ_CTX   => "_${prefix}.ctx";
+  Readonly::Scalar my $REQ_PRIVS => "_${DEFAULT_PREFIX}.privs";
 
 =head2 authz.priv ($resource, $action [, $attrs])
 
@@ -437,51 +420,101 @@ request only. Otherwise, functions identically to the C</any_role> function.
     }
   });
 
-=head2 authz.context ($value)
-
-Sets a value as the authorization context for the current request. This value is
-typically the data being guarded by privilege rules, e.g., a database record 
-object. Setting a context allows L</attr_cb> callbacks to render attributes for
-evaluation.
-
-Chainable, e.g.,
-
-  $c->authz->context($my_book)->permitted(Book => 'edit');
-
-=cut
-
-  $app->helper($prefix.'.context'  => sub($c, $ctx) {
-    if($c->tx->connection) {
-      $c->stash->{$REQ_CTX} = $ctx; $c->app->renderer->get_helper($prefix)->($c) 
-    } else {
-      die("[Authorization::RBAC] context can only be set from active request controller")
-    }
-  });
-
-=head2 authz.permitted ($resource, $action [, $attrs, [, $obj]])
+=head2 authz.permitted ($resource, $action [, $attrs, [, $value]])
 
 Check if an action is allowed by privilege rules. Returns true if any registered
 rule (static or dynamic) applies, false otherwise. Role, resource, action, and
 all privilege attributes must match.
 
-C<$resource> and C<$action> are strings, C<$attrs> is an optional HashRef whose
-keys are strings and values are booleans. If C<$obj> is given, it will be passed
-to C<attr_cb> (otherwise, whatever is set as the module's C<context> will be) to
-generate the dynamic attributes to check privileges' restrictions against.
+C<$resource> and C<$action> are strings, C<$attrs> is an optional HashRef of
+static attributes, that is to say, attributes related to the request itself, and
+not the specific data value(s) being requested. Dynamic attributes (those
+related to the data value) can be extrapolated by passing the data C<value> as 
+the final argument. An L<extraction method|/attribute-extraction> will then be 
+called on this value and the result will be merged with the static C<$attrs> to 
+determine the final attribute set. If the resource, action, and user's role(s) 
+match any registered privilege, and that privilege's restrictions are met by the
+attributes, then the permission check passes.
 
 Logs a "granted" or "denied" message to the selected C<Mojo::Log> instance
 
+=head4 Attribute Extraction
+
+The module will look in a number of places to find an appropriate method to
+extract the data value's authorization attributes, in order from most-specific
+to most-general. The first match that is found is used and the rest are ignored
+for that check. If L<prefix> has been changed, both the custom prefix and the 
+default are checked, in that order. Any characters in C<$resource> and 
+C<$action> that are not permitted in method names are replaced by C<_> 
+underscore characters - with the exception that periods are also left in when
+constructing helper names.
+
+=over
+
+=item * B<controller method> C<extract_attrs_$resource_$action>
+
+=item * B<helper> C<$prefix.extract_attrs.$resource_$action>
+
+=back
+
+If no match is found, it continues without the C<$action>
+
+=over
+
+=item * B<controller method> C<extract_attrs_$resource>
+
+=item * B<helper> C<$prefix.extract_attrs.$resource>
+
+=back
+
+And finally, without the C<$resource>
+
+=over
+
+=item * B<controller method> C<extract_attrs>
+
+=item * B<helper> C<$prefix.extract_attrs>
+
+=back
+
+Regardless of which method is used, it receives one parameter (besides the 
+controller object): the protected data value. It must return a HashRef (which
+can be empty, but must not be undefined) of attribute labels and their 
+corresponding values for the protected data.
+
 =cut
+
+  my $get_dyn_attrs = sub ($c, $ctx, $resource, $action) {
+    return {} unless(defined($ctx));
+    my @prefixes = ($DEFAULT_PREFIX);
+    unshift(@prefixes, $prefix) if($prefix ne $DEFAULT_PREFIX);
+
+    my $n = 'extract_attrs';
+    foreach ([$resource, $action], [$resource], []) {
+      my $cm = join('_', ($n, map { s/[^a-zA-Z0-9_]/_/gr } $_->@*));
+      if($c->can($cm)) {
+        try { return $c->$cm($ctx) } catch($e) { $c->log->warn($e); return {} }
+      }
+      foreach my $p (@prefixes) {
+        my $hm = join('.', ($p, $n, join('_', $_->@*)));
+        if(my $h = $c->app->renderer->get_helper($hm)) {
+          try { return $h->($c, $ctx) } catch($e) { $c->log->warn($e); return {} }
+        }
+      }
+    }
+    return {};
+  };
 
   $app->helper($prefix.'.permitted' => 
     sub($c, $resource, $action, $attrs = undef, $ctx = undef) {
       my @roles = $get_roles->($c)->@*;
-      if($cb{$resource}) {
-        try { $attrs = {($attrs//{})->%*, ($cb{$resource}->($c, $ctx//$c->stash->{$REQ_CTX})//{})->%*} } catch($e) { warn($e)}
-      }
+      # merge dynamic attributes from ctx object into $attrs
+      $attrs = {} unless(defined($attrs) && ref($attrs) eq 'HASH');
+      my $dyn = $get_dyn_attrs->($c, $ctx, $resource, $action)//{};
+      $attrs = {$attrs->%*, $dyn->%*};
 
       my @all_privs = (@privs, ($c->stash($REQ_PRIVS)||[])->@*);
-      my @p = grep { $_->accepts(        
+      my @p = grep { $_->accepts(
         resource   => $resource, 
         action     => $action, 
         attributes => $attrs, 
@@ -501,8 +534,8 @@ Logs a "granted" or "denied" message to the selected C<Mojo::Log> instance
 
 Yield a protected data value, if permitted. The first argument callback should
 perform the minimum necessary to obtain the data value and immediately return it.
-This value is then passed through C<attr_cb> and the dynamic attributes are merged
-with the static C<$attrs> Hash passed in. Then 
+This value is then passed through C<extract_attrs> and the dynamic attributes 
+are merged with the static C<$attrs> Hash passed in. Then 
 L<authz.permitted|/authz.permitted-($resource,-$action-[,-$attrs])> is called
 to check the resource/action/attrs against all registered privileges.
 
@@ -517,7 +550,7 @@ callbacks may be registered to handle the result of the authorization check.
       my $obj = $get_obj->();
       # If we got back null from the callback, we'll create an empty yield result so the caller can handle it on ->nullyield
       return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => undef, entity => undef) unless(defined($obj));
-      # Once the context is set, we can check permitted with evaluated attrs
+      # check permissions and create appropriate yield result object
       my $permitted = $c->app->renderer->get_helper($prefix)->($c)->permitted($resource, $action, $attrs, $obj);
       return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => 1, entity => $obj) if($permitted);
       return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => 0, entity => undef);

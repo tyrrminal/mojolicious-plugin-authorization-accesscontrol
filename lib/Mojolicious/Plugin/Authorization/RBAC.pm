@@ -458,14 +458,16 @@ Chainable, e.g.,
     }
   });
 
-=head2 authz.permitted ($resource, $action [, $attrs])
+=head2 authz.permitted ($resource, $action [, $attrs, [, $obj]])
 
 Check if an action is allowed by privilege rules. Returns true if any registered
 rule (static or dynamic) applies, false otherwise. Role, resource, action, and
 all privilege attributes must match.
 
 C<$resource> and C<$action> are strings, C<$attrs> is an optional HashRef whose
-keys are strings and values are booleans.
+keys are strings and values are booleans. If C<$obj> is given, it will be passed
+to C<attr_cb> (otherwise, whatever is set as the module's C<context> will be) to
+generate the dynamic attributes to check privileges' restrictions against.
 
 Logs a "granted" or "denied" message to the selected C<Mojo::Log> instance
 

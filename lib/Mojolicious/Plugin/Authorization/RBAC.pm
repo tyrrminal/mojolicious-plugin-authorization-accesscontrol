@@ -496,7 +496,8 @@ corresponding values for the protected data.
         try { return $c->$cm($ctx) } catch($e) { $c->log->warn($e); return {} }
       }
       foreach my $p (@prefixes) {
-        my $hm = join('.', ($p, $n, join('_', $_->@*)));
+        my $ri = join('_', $_->@*);
+        my $hm = join('.', ($p, $n, ($ri ? ($ri) : ()) ));
         if(my $h = $c->app->renderer->get_helper($hm)) {
           try { return $h->($c, $ctx) } catch($e) { $c->log->warn($e); return {} }
         }

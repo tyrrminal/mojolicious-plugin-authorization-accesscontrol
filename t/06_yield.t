@@ -89,18 +89,12 @@ role(admin => [
 
 # configure a callback to generate product attributes
 helper('authz.extract_attrs' => sub($c, $ctx) {
-  return +{
+  {
     owned => $ctx->{owner_id} == $current_user->{id}
   };
 });
 
 my $t = Test::Mojo->new();
-
-$current_user = $users[0];
-$t->delete_ok("/product/3")->status_is(204);
-
-done_testing;
-__END__\
 
 $current_user = $users[1];
 # not in any groups; can't delete anything (including their own stuff!)

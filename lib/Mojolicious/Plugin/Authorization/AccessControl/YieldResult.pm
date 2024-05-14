@@ -1,14 +1,14 @@
-package Mojolicious::Plugin::Authorization::RBAC::YieldResult;
+package Mojolicious::Plugin::Authorization::AccessControl::YieldResult;
 use v5.26;
 
-# ABSTRACT: Provides mechanism for handling the result of RBAC's yield method
+# ABSTRACT: Provides mechanism for handling the result of AccessControl's yield method
 
 =encoding UTF-8
 
 =head1 NAME
 
-Mojolicious::Plugin::Authorization::RBAC::YieldResult - provides mechanism for
-handling the result of RBAC's yield method
+Mojolicious::Plugin::Authorization::AccessControl::YieldResult - provides mechanism for
+handling the result of AccessControl's yield method
 
 =head1 SYNOPSIS
 
@@ -33,7 +33,7 @@ protected data value is exposed minimally, to the C<granted> subroutines, while
 providing simple mechanisms to handle the alternative path(s).
 
 Normally, you will not create instances of this class yourself; instead, one 
-will be returned from L<Mojolicious::Plugin::Authorization::RBAC>'s C<authz.yield>
+will be returned from L<Mojolicious::Plugin::Authorization::AccessControl>'s C<authz.yield>
 helper. Each of its main methods (L<granted>, L<denied>, L<null>) is chainable
 so that more of those can be called on the result, as shown above.
 
@@ -54,7 +54,7 @@ If C<granted> is undefined, only the L<null> handler(s) will called.
 
 use Object::Pad;
 
-class Mojolicious::Plugin::Authorization::RBAC::YieldResult :strict(params) {
+class Mojolicious::Plugin::Authorization::AccessControl::YieldResult :strict(params) {
 
   field $granted :param = undef;
   field $entity  :param = undef;

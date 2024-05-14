@@ -5,7 +5,7 @@ use Test2::V0;
 
 use Mojolicious::Lite;
 
-use Mojolicious::Plugin::Authorization::RBAC qw(role priv any_role);
+use Mojolicious::Plugin::Authorization::AccessControl qw(role priv any_role);
 
 use experimental qw(signatures);
 
@@ -18,7 +18,7 @@ role(admin => [
   priv(Book => 'read')
 ]);
 
-plugin('Authorization::RBAC',
+plugin('Authorization::AccessControl',
   get_roles => sub($c) { return [@roles] },
 );
 

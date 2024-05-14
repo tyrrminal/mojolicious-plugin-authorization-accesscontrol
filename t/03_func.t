@@ -3,7 +3,7 @@ use warnings;
 
 use Test2::V0;
 
-use Mojolicious::Plugin::Authorization::RBAC qw(role priv any_role);
+use Mojolicious::Plugin::Authorization::AccessControl qw(role priv any_role);
 
 ok(!warns { role(admin => [priv(User => 'read')]) }, 'check role/priv add');
 

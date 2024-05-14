@@ -1,14 +1,14 @@
 # NAME
 
-Mojolicious::Plugin::Authorization::RBAC - provides Role-Based Access Control
+Mojolicious::Plugin::Authorization::AccessControl - provides Role-Based Access Control
 for Mojolicious applications
 
 # SYNOPSIS
 
-    $self->plugin('Authorization::RBAC' => {get_roles => sub($c) {...}});
+    $self->plugin('Authorization::AccessControl' => {get_roles => sub($c) {...}});
 
     # in, e.g., controller
-    use Mojolicious::Plugin::Authorization::RBAC qw(priv role any_role);
+    use Mojolicious::Plugin::Authorization::AccessControl qw(priv role any_role);
 
     BEGIN {
       role(admin => [
@@ -125,10 +125,10 @@ helpful for handling these (though not required).
         }, Book => 'edit');
         # handle edit logic here
         $book->update(...);
-      } catch($e isa Authorization::RBAC::NullYield) {
+      } catch($e isa Authorization::AccessControl::NullYield) {
         # thrown if the value returned by the sub is undef
         return $self->render(status => 404)
-      } catch($e isa Authorization::RBAC::Failure) {
+      } catch($e isa Authorization::AccessControl::Failure) {
         # thrown if all privilege checks fail
         return $self->render(status => 401)
       } catch($e) {
@@ -140,7 +140,7 @@ This module also supports dynamic privileges - these are rules that are register
 for a single Request, so they can be loaded from the database at the beginning
 of each request, ensuring that they are always up-to-date.
 
-    $app->plugin('Authorization::RBAC' => {
+    $app->plugin('Authorization::AccessControl' => {
       get_roles => sub($c) {
         [
           $c->current_user_roles->@*, # static roles, e.g., from Authorization Server
@@ -247,7 +247,7 @@ attributes which apply to that context whose values are boolean.
 
 # METHODS
 
-[Mojolicious::Plugin::Authorization::RBAC](https://metacpan.org/pod/Mojolicious%3A%3APlugin%3A%3AAuthorization%3A%3ARBAC) inherits all methods from 
+[Mojolicious::Plugin::Authorization::AccessControl](https://metacpan.org/pod/Mojolicious%3A%3APlugin%3A%3AAuthorization%3A%3ARBAC) inherits all methods from 
 [Mojolicious::Plugin](https://metacpan.org/pod/Mojolicious%3A%3APlugin) and implements the following new ones
 
 ## register( \\%params )
@@ -322,7 +322,7 @@ Produce a guarded data value, if permitted. The first argument callback should
 perform the minimum necessary to obtain the data value, and return it. This
 value is then automatically set as the request's authorization context, and then
 the privilege rules are evaluated. If the callback returns `undef`, an 
-`Authorization::RBAC::NullYield` exception is thrown.
+`Authorization::AccessControl::NullYield` exception is thrown.
 
 `@args` must be in one of two possible formats. For a single privilege check,
 `($resource, $action [, $attrs])`, just like the arguments to 
@@ -341,7 +341,7 @@ are respected on these objects.
 An authorization log message is emitted for each privilege checked.
 
 If all privilege checks pass, the data is returned. If any check fails, an
-`Authorization::RBAC::Failure` exception is thrown.
+`Authorization::AccessControl::Failure` exception is thrown.
 
 # AUTHOR
 

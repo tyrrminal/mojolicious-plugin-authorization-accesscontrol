@@ -7,7 +7,7 @@ use Mojolicious::Lite;
 
 use experimental qw(signatures);
 
-plugin('Authorization::RBAC' => {
+plugin('Authorization::AccessControl' => {
   get_roles => sub($c) {[]},
   prefix => 'authorization'
 });

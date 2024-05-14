@@ -6,7 +6,7 @@ use Test2::V0;
 use Mojolicious::Lite;
 
 use List::Util qw(first);
-use Mojolicious::Plugin::Authorization::RBAC qw(role priv any_role);
+use Mojolicious::Plugin::Authorization::AccessControl qw(role priv any_role);
 use Syntax::Keyword::Try;
 use Test::Mojo;
 
@@ -28,7 +28,7 @@ my @products = (
 
 # initialize the plugin and tell it how to get the current_user's roles
 my $current_user;
-plugin('Authorization::RBAC' => {
+plugin('Authorization::AccessControl' => {
   get_roles => sub($c) { $current_user->{roles} }
 });
 

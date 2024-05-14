@@ -1,21 +1,21 @@
-package Mojolicious::Plugin::Authorization::RBAC;
+package Mojolicious::Plugin::Authorization::AccessControl;
 use v5.26;
 
-#ABSTRACT: provides Role-Based Access Control for Mojolicious applications
+#ABSTRACT: provides hybrid RBAC-ABAC for Mojolicious applications
 
 =encoding UTF-8
 
 =head1 NAME
 
-Mojolicious::Plugin::Authorization::RBAC - provides Role-Based Access Control
+Mojolicious::Plugin::Authorization::AccessControl - provides hybrid RBAC-ABAC
 for Mojolicious applications
 
 =head1 SYNOPSIS
 
-  $self->plugin('Authorization::RBAC' => {get_roles => sub($c) {...}});
+  $self->plugin('Authorization::AccessControl' => {get_roles => sub($c) {...}});
 
   # in, e.g., controller
-  use Mojolicious::Plugin::Authorization::RBAC qw(priv role any_role);
+  use Mojolicious::Plugin::Authorization::AccessControl qw(priv role any_role);
 
   BEGIN {
     role(admin => [
@@ -159,7 +159,7 @@ This module also supports dynamic privileges - these are rules that are register
 for a single Request, so they can be loaded from the database at the beginning
 of each request, ensuring that they are always up-to-date.
 
-  $app->plugin('Authorization::RBAC' => {
+  $app->plugin('Authorization::AccessControl' => {
     get_roles => sub($c) {
       [
         $c->current_user_roles->@*, # static roles, e.g., from Authorization Server
@@ -182,7 +182,6 @@ of each request, ensuring that they are always up-to-date.
   BEGIN {
     any_role(
       priv(Book => 'edit', {owner => true}),
-      priv(Book => 'edit', {public => true}),
     );
   }
 
@@ -193,9 +192,9 @@ of each request, ensuring that they are always up-to-date.
     }
   });
 
-Now, when the privileges are checked, the user's group must match, and the 
-C<book_id> attribute must also match, allowing for fine-grained privilege
-application.
+Now, when the privileges are checked, the user's group must match (unless they 
+are the owner), or there must be a dynamic rule for a role belonging to the user,
+with a matching book_id in order to access that book.
 
 =head1 DESCRIPTION
 
@@ -217,14 +216,14 @@ from the database before processing each request, ensuring that any runtime
 changes to these rules are taken into account. There is a corresponding 
 L<authz.priv|/authz.priv-($resource,-$action-[,-$attrs])> helper, but as it and 
 L</priv> simply return a 
-L<Privilege|Mojolicious::Plugin::Authorization::RBAC::Privilege> object without 
+L<Privilege|Mojolicious::Plugin::Authorization::AccessControl::Privilege> object without 
 registering it, there is no difference between these. The helper version is merely
 provided as a convenience.
 
 When it comes to checking privileges, a few options are available as well. The
 simplest is the L<authz.permitted|/authz.permitted-($resource,-$action-[,-$attrs])> 
 helper. Or, you can use L<authz.yield|/authz.yield-($cb,-@args)> to invoke the 
-L<Mojolicious::Plugin::Authorization::RBAC::YieldResult> workflow and ensure 
+L<Mojolicious::Plugin::Authorization::AccessControl::YieldResult> workflow and ensure 
 that privileged data objects are only made available to application logic once 
 privilege checks are passed.
 
@@ -233,8 +232,8 @@ privilege checks are passed.
 use Mojo::Base 'Mojolicious::Plugin';
 
 use Exporter 'import';
-use Mojolicious::Plugin::Authorization::RBAC::Privilege;
-use Mojolicious::Plugin::Authorization::RBAC::YieldResult;
+use Mojolicious::Plugin::Authorization::AccessControl::Privilege;
+use Mojolicious::Plugin::Authorization::AccessControl::YieldResult;
 use Readonly;
 use Syntax::Keyword::Try;
 
@@ -260,7 +259,7 @@ sub _add_priv($priv, $container) {
   } else {
     $container = \@privs;
   }
-  die('Invalid privilege object') unless(ref($priv) && $priv->isa('Mojolicious::Plugin::Authorization::RBAC::Privilege'));
+  die('Invalid privilege object') unless(ref($priv) && $priv->isa('Mojolicious::Plugin::Authorization::AccessControl::Privilege'));
   warn("Duplicate privilege skipped: $priv\n") and return if (grep { $priv->is_equal($_) } @all_privs);
   push($container->@*, $priv);
 }
@@ -270,7 +269,7 @@ sub _add_priv($priv, $container) {
 Declares role-specific static privileges.
 
 Accepts a hash whose keys are role names (string) and whose values are ArrayRefs
-of L<Privileges|Mojolicious::Plugin::Authorization::RBAC::Privilege>. Normally,
+of L<Privileges|Mojolicious::Plugin::Authorization::AccessControl::Privilege>. Normally,
 these privileges are created via the L</priv> function.
 
 =cut
@@ -281,7 +280,7 @@ sub role(%params) {
 
 sub _role($params, $container = undef) {
   foreach my $role (keys($params->%*)) {
-    die("Invalid RBAC role name: '$role'\n") if($role !~ /\w/);
+    die("Invalid role name: '$role'\n") if($role !~ /\w/);
     foreach($params->{$role}->@*) {
       $_->role($role);
       _add_priv($_, $container);
@@ -294,7 +293,7 @@ sub _role($params, $container = undef) {
 Declares static privileges that apply to all users regardless of role
 
 Accepts an array of 
-L<Privileges|Mojolicious::Plugin::Authorization::RBAC::Privilege>. Normally,
+L<Privileges|Mojolicious::Plugin::Authorization::AccessControl::Privilege>. Normally,
 these privileges are created via the L</priv> function.
 
 =cut
@@ -309,7 +308,7 @@ sub _any_role($privs, $container = undef) {
 
 =head2 priv($resource, $action[, $restrictions])
 
-Returns a L<Privilege|Mojolicious::Plugin::Authorization::RBAC::Privilege> object
+Returns a L<Privilege|Mojolicious::Plugin::Authorization::AccessControl::Privilege> object
 for the passed resource/action and optional restrictions on that privilege.
 
 N.B. the returned object is not registered and must be declared with, e.g.,
@@ -319,7 +318,7 @@ L<authz.permitted|/authz.permitted-($resource,-$action-[,-$attrs])>  checks.
 =cut
 
 sub priv($resource, $action, $restrictions = {}) {
-  Mojolicious::Plugin::Authorization::RBAC::Privilege->new(
+  Mojolicious::Plugin::Authorization::AccessControl::Privilege->new(
     resource     => $resource,
     action       => $action,
     restrictions => $restrictions
@@ -328,7 +327,7 @@ sub priv($resource, $action, $restrictions = {}) {
 
 =head1 METHODS
 
-L<Mojolicious::Plugin::Authorization::RBAC> inherits all methods from 
+L<Mojolicious::Plugin::Authorization::AccessControl> inherits all methods from 
 L<Mojolicious::Plugin> and implements the following new ones
 
 =head2 register( \%params )
@@ -522,11 +521,11 @@ corresponding values for the protected data.
         roles      => [@roles],
       ) } (@all_privs);
 
-      if(@p) { $log_f->("[Authorization::RBAC] Granted: ".$p[0]); return 1; }
+      if(@p) { $log_f->("[Authorization::AccessControl] Granted: ".$p[0]); return 1; }
       my $role_str = @roles ? '['.join(',', @roles).'] ' : '';
       my $attr_str = '('.join(',',(map { "$_=".$attrs->{$_} } (keys(($attrs//{})->%*)))).')';
       my $check = sprintf("$role_str$resource => $action$attr_str");
-      $log_f->("[Authorization::RBAC] Denied: $check");
+      $log_f->("[Authorization::AccessControl] Denied: $check");
       return 0;
     }
   );
@@ -540,7 +539,7 @@ are merged with the static C<$attrs> Hash passed in. Then
 L<authz.permitted|/authz.permitted-($resource,-$action-[,-$attrs])> is called
 to check the resource/action/attrs against all registered privileges.
 
-Returns a L<Mojolicious::Plugin::Authorization::RBAC::YieldResult>, upon which
+Returns a L<Mojolicious::Plugin::Authorization::AccessControl::YieldResult>, upon which
 callbacks may be registered to handle the result of the authorization check.
 
 =cut
@@ -550,11 +549,11 @@ callbacks may be registered to handle the result of the authorization check.
 
       my $obj = $get_obj->();
       # If we got back null from the callback, we'll create an empty yield result so the caller can handle it on ->nullyield
-      return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => undef, entity => undef) unless(defined($obj));
+      return Mojolicious::Plugin::Authorization::AccessControl::YieldResult->new(granted => undef, entity => undef) unless(defined($obj));
       # check permissions and create appropriate yield result object
       my $permitted = $c->app->renderer->get_helper($prefix)->($c)->permitted($resource, $action, $attrs, $obj);
-      return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => 1, entity => $obj) if($permitted);
-      return Mojolicious::Plugin::Authorization::RBAC::YieldResult->new(granted => 0, entity => undef);
+      return Mojolicious::Plugin::Authorization::AccessControl::YieldResult->new(granted => 1, entity => $obj) if($permitted);
+      return Mojolicious::Plugin::Authorization::AccessControl::YieldResult->new(granted => 0, entity => undef);
     }
   );
 

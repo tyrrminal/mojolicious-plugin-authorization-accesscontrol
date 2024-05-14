@@ -5,11 +5,11 @@ use Test2::V0;
 
 use Mojolicious::Lite;
 
-use Mojolicious::Plugin::Authorization::RBAC qw(role priv any_role);
+use Mojolicious::Plugin::Authorization::AccessControl qw(role priv any_role);
 
 use experimental qw(signatures);
 
-plugin('Authorization::RBAC',
+plugin('Authorization::AccessControl',
   get_roles => sub($c) { return [] },
   log => undef,
 );
@@ -55,7 +55,7 @@ role(admin => [
 # is(app->authz->permitted(Image => 'view', { image_id => 9, rep => 'small', own => 0, deleted => 0 }), bool(1), 'complex attributes success');
 # is(app->authz->permitted(Image => 'view', { image_id => 9, rep => 'original', own => 0, deleted => 0 }), bool(0), 'complex attributes fail');
 
-plugin('Authorization::RBAC',
+plugin('Authorization::AccessControl',
   get_roles => sub($c) { return [qw(admin)] },
   log => undef,
 );

@@ -1,26 +1,26 @@
-package Mojolicious::Plugin::Authorization::RBAC::Privilege;
+package Mojolicious::Plugin::Authorization::AccessControl::Privilege;
 use v5.26;
 
-# ABSTRACT: Defines an RBAC Privilege
+# ABSTRACT: Defines an AccessControl Privilege
 
 =encoding UTF-8
 
 =head1 NAME
 
-Mojolicious::Plugin::Authorization::RBAC::Privilege - defines a single RBAC
-privilege
+Mojolicious::Plugin::Authorization::AccessControl::Privilege - defines a single
+AccessControl privilege
 
 =head1 SYNOPSIS
 
-  use Mojolicious::Plugin::Authorization::RBAC::Privilege;
+  use Mojolicious::Plugin::Authorization::AccessControl::Privilege;
 
-  my $p1 = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(
+  my $p1 = Mojolicious::Plugin::Authorization::AccessControl::Privilege->new(
     resource => 'Book',
     action   => 'edit',
     role     => 'admin',
   );
 
-  my $p2 = Mojolicious::Plugin::Authorization::RBAC::Privilege->new(
+  my $p2 = Mojolicious::Plugin::Authorization::AccessControl::Privilege->new(
     resource     => 'Book',
     action       => 'edit',
     restrictions => {public => 1},
@@ -36,12 +36,12 @@ privilege
 
 =head1 DESCRIPTION
 
-This class is utilized by L<Mojolicious::Plugin::Authorization::RBAC> to 
+This class is utilized by L<Mojolicious::Plugin::Authorization::AccessControl> to 
 encapsulate an authorization privilege. Typically, privileges are created through
 that package's convenience function 
-L<priv|Mojolicious::Plugin::Authorization::RBAC/priv> rather than using this
+L<priv|Mojolicious::Plugin::Authorization::AccessControl/priv> rather than using this
 class's constructor directly. Either way, newly-created privileges are not
-registered for checks until RBAC's C<role>/C<any_role> functions are used. 
+registered for checks until AcessControl's C<role>/C<any_role> functions are used. 
 
 =head1 METHODS
 
@@ -68,7 +68,7 @@ are simple strings. Role may not be an empty string, although C<undef> is allowe
 
 use Object::Pad;
 
-class Mojolicious::Plugin::Authorization::RBAC::Privilege :strict(params) {
+class Mojolicious::Plugin::Authorization::AccessControl::Privilege :strict(params) {
   use Data::Compare;
   use Scalar::Util qw(looks_like_number);
 
